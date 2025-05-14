@@ -18,22 +18,25 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.lib.server.IdleTask;
+import com.google.devtools.build.lib.server.IdleTaskException;
 import com.google.devtools.build.lib.util.FileSystemLock;
 import com.google.devtools.build.lib.util.FileSystemLock.LockMode;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Comparator;
 import javax.annotation.Nullable;
 
 /** A cache directory that stores the contents of fetched repos across different workspaces. */
-public class RepoContentsCache {
+public final class RepoContentsCache {
   public static final String RECORDED_INPUTS_SUFFIX = ".recorded_inputs";
+  public static final String LOCK_PATH = "gc_lock";
 
   @Nullable private Path path;
-
-  // TODO: wyv@ - implement garbage collection
+  @Nullable private FileSystemLock sharedLock;
 
   public void setPath(@Nullable Path path) {
     this.path = path;
@@ -127,5 +130,47 @@ public class RepoContentsCache {
       FileSystemUtils.writeContent(counterFile, StandardCharsets.UTF_8, counter);
       return counter;
     }
+  }
+
+  public void acquireSharedLock() throws IOException {
+    Preconditions.checkState(path != null);
+    sharedLock = FileSystemLock.get(path.getRelative(LOCK_PATH), LockMode.SHARED);
+  }
+
+  public void releaseSharedLock() throws IOException {
+    Preconditions.checkState(sharedLock != null);
+    sharedLock.close();
+    sharedLock = null;
+  }
+
+  public IdleTask createGcIdleTask(Duration maxAge) {
+    Preconditions.checkState(path != null);
+    return new IdleTask() {
+      @Override
+      public String displayName() {
+        return "Repo contents cache garbage collection";
+      }
+
+      @Override
+      public Duration delay() {
+        return Duration.ofMinutes(5);
+      }
+
+      @Override
+      public void run() throws IdleTaskException {
+        try {
+          Preconditions.checkState(path != null);
+          try (var lock = FileSystemLock.tryGet(path.getRelative(LOCK_PATH), LockMode.EXCLUSIVE)) {
+            runGc(maxAge);
+          }
+        } catch (IOException e) {
+          throw new IdleTaskException(e);
+        }
+      }
+    };
+  }
+
+  private void runGc(Duration maxAge) throws IOException {
+    // TODO: DELETE ZE FILES
   }
 }
