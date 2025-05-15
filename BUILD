@@ -1,5 +1,4 @@
 # Bazel - Google's Build System
-
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
@@ -9,7 +8,6 @@ load("//src/tools/bzlmod:utils.bzl", "get_canonical_repo_name")
 load("//tools/distributions:distribution_rules.bzl", "distrib_jar_filegroup")
 
 package(default_visibility = ["//scripts/release:__pkg__"])
-
 license(
     name = "license",
     package_name = "bazelbuild/bazel",
